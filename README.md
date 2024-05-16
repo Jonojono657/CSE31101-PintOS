@@ -1,1 +1,2 @@
-# CSE31101-PintOS
+# CSCC69-Pintos
+
