@@ -69,7 +69,7 @@ int load_avg;
 /*project1*/
 
 /*Store the minimum of sleep_list*/
-static int64_t next_tick_to_awake;
+static int64_t next_awake_tick;
 
 static void kernel_thread (thread_func *, void *aux);
 
@@ -112,8 +112,9 @@ thread_init (void)
   initial_thread->tid = allocate_tid ();
 
   /*project1*/
+  //Initialize sleep_list and next_awake_tick
   list_init(&sleep_list);
-  next_tick_to_awake = INT64_MAX;
+  next_awake_tick = INT64_MAX;
   /*project1*/
 }
 
@@ -134,6 +135,7 @@ thread_start (void)
   sema_down (&idle_started);
 
   /*project1*/
+  //Initialize load_avg
   load_avg = LOAD_AVG_DEFAULT;
   /*project1*/
 }
@@ -222,6 +224,7 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
   /*project1*/
+  //compare the priorities of the currently running thread and the newly inserted one. And if new thread has higher priority, yield the cpu.
   thread_preemption();
   /*project1*/
 
@@ -262,9 +265,10 @@ thread_unblock (struct thread *t)
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   
-  /*porject1*/
-  list_insert_ordered(&ready_list, &t->elem, thread_compare_priority, 0);
-  /*porject1*/
+  /*project1*/
+  //When the thread is unblocked, it is inserted to ready_list in the priority order
+  list_insert_ordered(&ready_list, &t->elem, thread_compare_priority, NULL);
+  /*project1*/
 
   t->status = THREAD_READY;
   intr_set_level (old_level);
@@ -336,6 +340,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   /*project1*/
+  //If current thread is not idle thread, insert it to ready_list in priority order
   if (cur != idle_thread) 
     list_insert_ordered (&ready_list, &cur->elem, thread_compare_priority, 0);
   /*project1*/
@@ -355,21 +360,18 @@ thread_sleep (int64_t ticks)
 	update the global tick if necessary,
 	and call schedule() */
   /* When you manipulate thread list, disable interrupt! */
-  struct thread *cur;
-  enum intr_level old_level;
+  struct thread *cur = thread_current ();
+  enum intr_level old_level = intr_disable ();
 
-  old_level = intr_disable ();
-  cur = thread_current ();
+  ASSERT (cur != idle_thread); //Assert error if current thread is idle thread
 
-  ASSERT (cur != idle_thread);
+  cur->wakeup_tick = ticks; //store the local tick to wake up
 
-  cur->wakeup_tick = ticks;
+  list_push_back (&sleep_list, &cur->elem); //insert current thread to sleep list.
 
-  list_push_back (&sleep_list, &cur->elem);
+  update_next_awake_tick (ticks); //update the next_awake_tick
 
-  update_next_tick_to_awake (ticks);
-
-  thread_block ();
+  thread_block ();//Changet the state to Blocked, and call schedule.
 
   intr_set_level (old_level);
 }
@@ -377,12 +379,13 @@ thread_sleep (int64_t ticks)
 void 
 thread_awake (int64_t ticks)
 {
-  next_tick_to_awake = INT64_MAX;
+  next_awake_tick = INT64_MAX;//initialize
 	struct list_elem *e= list_begin (&sleep_list);
  
-	while (e != list_end (&sleep_list))
+	while (e != list_end (&sleep_list))//traverse the sleep list
 	{
 		struct thread *t = list_entry(e, struct thread, elem);
+    //If wakeup_tick is smaller than ticks(it means this thread has to wake up), remove this thread from the sleep_list and change the state to Ready. 
 		if (t->wakeup_tick <= ticks)
 		{
 			e = list_remove (&t->elem);
@@ -390,26 +393,26 @@ thread_awake (int64_t ticks)
 		}
 		else
 		{
-			update_next_tick_to_awake (t->wakeup_tick);
+			update_next_awake_tick (t->wakeup_tick);//renew next_awake_tick
 			e = list_next (e);
 		}
 	}
 }
 
 void 
-update_next_tick_to_awake (int64_t ticks)
+update_next_awake_tick (int64_t ticks)//if tick is smaller than next_awake tick, then update next_awake_tick.
 {
-  next_tick_to_awake = next_tick_to_awake > ticks ? ticks : next_tick_to_awake;
+  next_awake_tick = ticks < next_awake_tick ? ticks : next_awake_tick;
 }
 
 int64_t 
-get_next_tick_to_awake (void)
+get_next_awake_tick (void) //get the value of next_awake_tick
 {
-  return next_tick_to_awake;
+  return next_awake_tick;
 }
 
 void 
-thread_preemption (void)
+thread_preemption (void)//If the priority of the thread on the front of ready_list is bigger than current thread, then yield.
 {
     if (!list_empty (&ready_list) && 
     thread_current ()->priority < 
@@ -470,7 +473,7 @@ refresh_priority (void)
 }
 
 bool
-thread_compare_priority (struct list_elem *l, struct list_elem *s, void *aux UNUSED)
+thread_compare_priority (struct list_elem *l, struct list_elem *s, void *aux UNUSED)//Compare which thread has higher priority. 
 {
     return list_entry (l, struct thread, elem)->priority
          > list_entry (s, struct thread, elem)->priority;
@@ -569,11 +572,11 @@ thread_set_priority (int new_priority)
     return;
   /*project1*/
 
-  thread_current ()->base_priority = new_priority;
+  thread_current ()->base_priority = new_priority;//update base_priority to new one.
 
   /*project1*/
   refresh_priority ();
-	thread_preemption ();
+	thread_preemption ();//Because the priority of current thread change, compare the priority again.
   /*project1*/
 }
 
