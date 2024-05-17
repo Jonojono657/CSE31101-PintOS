@@ -1,6 +1,7 @@
 #ifndef THREADS_SYNCH_H
 #define THREADS_SYNCH_H
 
+#include <debug.h>
 #include <list.h>
 #include <stdbool.h>
 
@@ -35,6 +36,11 @@ struct condition
   {
     struct list waiters;        /* List of waiting threads. */
   };
+
+/*project1*/
+bool 
+_priority (const struct list_elem *l, const struct list_elem *s, void *aux UNUSED);
+/*project1*/
 
 void cond_init (struct condition *);
 void cond_wait (struct condition *, struct lock *);

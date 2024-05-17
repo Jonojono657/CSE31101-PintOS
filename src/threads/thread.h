@@ -23,6 +23,11 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+/*project1*/
+#define NICE_DEFAULT 0
+#define RECENT_CPU_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
+/*project1*/
 
 /* A kernel thread or user process.
 
@@ -96,6 +101,20 @@ struct thread
    /*Store the local tick to wake up*/
     int64_t wakeup_tick;
 
+   /*project1*/
+   int base_priority;
+
+   // 대기 원인 락
+   struct lock *wait_on_lock;
+
+   // 우선순위 기부 리스트와 원소
+   struct list donations;
+   struct list_elem donation_elem;
+
+   int nice;
+   int recent_cpu;
+   /*project1*/
+
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -128,6 +147,26 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+
+/*project1*/
+void thread_sleep (int64_t ticks);
+void thread_awake (int64_t ticks);
+void update_next_tick_to_awake (int64_t ticks);
+int64_t get_next_tick_to_awake (void);
+void thread_preemption (void);
+void donate_priority (void);
+void remove_with_lock (struct lock *lock);
+void refresh_priority (void);
+bool thread_compare_priority (struct list_elem *l, 
+struct list_elem *s, void *aux UNUSED);
+bool thread_compare_donate_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
+void mlfqs_calculate_priority (struct thread *t);
+void mlfqs_calculate_recent_cpu (struct thread *t);
+void mlfqs_calculate_load_avg (void);
+void mlfqs_increment_recent_cpu (void);
+void mlfqs_recalculate_recent_cpu (void);
+void mlfqs_recalculate_priority (void);
+/*project1*/
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
